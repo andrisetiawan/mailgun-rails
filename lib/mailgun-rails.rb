@@ -15,8 +15,8 @@ module Mailgun
       self.settings = settings
     end
 
-    def api_host
-      self.settings[:api_host]
+    def domain
+      self.settings[:domain]
     end
 
     def api_key
@@ -43,7 +43,7 @@ module Mailgun
         data << Curl::PostField.content("to", destination)
       end
 
-      curl = Curl::Easy.new("https://api:#{self.api_key}@api.mailgun.net/v2/#{self.api_host}/messages.mime")
+      curl = Curl::Easy.new("https://api:#{self.api_key}@api.mailgun.net/v2/#{self.domain}/messages.mime")
 
       curl.proxy_url            = self.http_proxy if self.http_proxy
       curl.ssl_verify_peer      = self.ssl_verify_peer
@@ -54,7 +54,7 @@ module Mailgun
         begin
           error = ActiveSupport::JSON.decode(curl.body_str)["message"]
         rescue
-          error = "Unknown Mailgun Error"
+          error = "Error. Mailgun response: #{curl.body_str}"
         end
         raise Mailgun::DeliveryError.new(error)
       end
