@@ -1,5 +1,5 @@
 require 'rake'
-require 'rake/gempackagetask'
+require 'rubygems/package_task'
 
 begin
   require 'jeweler'
@@ -12,7 +12,6 @@ begin
     jewel.description = 'Mailgun adapter for Rails.'
     jewel.authors     = ["Tanel Suurhans", "Tarmo Lehtpuu"]
     jewel.files       = FileList["lib/mailgun-rails.rb", "MIT-LICENCE", "README.markdown"]
-    jewel.add_dependency 'curb'
     jewel.add_dependency 'activesupport'
     jewel.add_dependency 'actionmailer'
   end

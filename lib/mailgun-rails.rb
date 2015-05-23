@@ -1,6 +1,7 @@
 require "action_mailer"
 require "active_support"
-require "curb"
+require "net/https"
+require "uri"
 
 module Mailgun
 
@@ -23,8 +24,16 @@ module Mailgun
       self.settings[:api_key]
     end
 
-    def http_proxy
-      self.settings[:http_proxy]
+    def proxy_host
+      self.settings[:proxy_host] ? self.settings[:proxy_host] : nil
+    end
+
+    def proxy_port
+      self.settings[:proxy_port] ? self.settings[:proxy_port] : nil
+    end
+
+    def timeout
+      self.settings[:timeout] ? self.settings[:timeout] : 20
     end
 
     def ssl_verify_peer
@@ -32,36 +41,47 @@ module Mailgun
     end
 
     def deliver!(mail)
-      body              = Curl::PostField.content("message", mail.encoded)
-      body.remote_file  = "message"
-      body.content_type = "application/octet-stream"
+      uri = URI.parse("https://api.mailgun.net/v2/#{self.domain}/messages")
 
-      data = []
-      data << body
+      data = {
+        'to'        => mail[:to].value,
+        'from'      => mail[:from].value,
+        'subject'   => mail.subject,
+        'text'      => mail.text_part.body.raw_source,
+        'html'      => mail.html_part.body.raw_source
+      }
 
-      mail.destinations.each do |destination|
-        data << Curl::PostField.content("to", destination)
-      end
+      data['cc']  = mail[:cc].value unless mail[:cc].value.blank?
+      data['bcc'] = mail[:cc].value unless mail[:cc].value.blank?
 
-      curl = Curl::Easy.new("https://api:#{self.api_key}@api.mailgun.net/v2/#{self.domain}/messages.mime")
+      http = Net::HTTP.new(uri.host, uri.port, self.proxy_host, self.proxy_port)
+      http.use_ssl      = true
+      http.open_timeout = self.timeout
+      http.read_timeout = self.timeout
+      http.verify_mode  = OpenSSL::SSL::VERIFY_NONE if self.ssl_verify_peer == false
 
-      curl.proxy_url            = self.http_proxy if self.http_proxy
-      curl.ssl_verify_peer      = self.ssl_verify_peer
-      curl.multipart_form_post  = true
-      curl.http_post(*data)
+      request = Net::HTTP::Post.new(uri.request_uri)
+      request.basic_auth("api", self.api_key)
+      request.set_form_data(data)
 
-      if curl.response_code != 200
+      response = http.request(request)
+
+      if response.message == "OK"
+        mailgun_id = ActiveSupport::JSON.decode(response.body)["id"] rescue nil
+        puts "MAILGUN-SENT: #{mail[:to].value} - #{mailgun_id}"
+      else
+        puts "MAILGUN-ERROR: #{response.body}"
         begin
-          error = ActiveSupport::JSON.decode(curl.body_str)["message"]
-        rescue
-          error = "Error. Mailgun response: #{curl.body_str}"
+          error = ActiveSupport::JSON.decode(response.body)["message"]
+        rescue Exception => e
+          error = "MAILGUN-ERROR #{e.to_s}"
         end
         raise Mailgun::DeliveryError.new(error)
       end
-    end
 
+    end
   end
+
 end
 
 ActionMailer::Base.add_delivery_method :mailgun, Mailgun::DeliveryMethod
-
