@@ -43,12 +43,15 @@ module Mailgun
     def deliver!(mail)
       uri = URI.parse("https://api.mailgun.net/v2/#{self.domain}/messages")
 
+      text_part = mail.text_part.body.raw_source rescue ''
+      body_part = mail.html_part.body.raw_source rescue ''
+
       data = {
         'to'        => mail[:to].value,
         'from'      => mail[:from].value,
         'subject'   => mail.subject,
-        'text'      => mail.text_part.body.raw_source,
-        'html'      => mail.html_part.body.raw_source
+        'text'      => text_part,
+        'html'      => body_part
       }
 
       data['cc']  = mail[:cc].value unless mail[:cc].value.blank?
